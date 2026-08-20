@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Copenhagen Weather Widget</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .weather-widget {
+    width: 150px;
+    height: 120px;
+    background: rgba(15, 18, 24, 0.85);
+    border-radius: 14px;
+    color: #f4f6f8;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .city {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: #b9c2cc;
+    text-transform: uppercase;
+  }
+
+  .main-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .temp {
+    font-size: 34px;
+    font-weight: 300;
+    line-height: 1;
+  }
+
+  .icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+
+  .updated {
+    font-size: 9px;
+    color: #6b7480;
+    text-align: right;
+  }
+
+  .error {
+    font-size: 11px;
+    color: #e08080;
+  }
+</style>
+</head>
+<body>
+
+<div class="weather-widget" id="widget">
+  <div class="city">Copenhagen</div>
+  <div class="main-row">
+    <div class="temp" id="temp">--°</div>
+    <svg class="icon" id="icon" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+  <div class="updated" id="updated">loading…</div>
+</div>
+
+<script>
+  // Copenhagen, Denmark — coordinates converted from city-center coordinates
+  const LAT = 55.6761;
+  const LON = 12.5683;
+  const REFRESH_MS = 10 * 60 * 1000; // 10 minutes
+
+  const API_URL =
+    `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}` +
+    `&current=temperature_2m,weather_code&timezone=auto`;
+
+  // Minimal single-color line icons keyed by WMO weather codes
+  // https://open-meteo.com/en/docs (WMO Weather interpretation codes)
+  const S = '#f4f6f8'; // icon stroke color
+  const ICONS = {
+    sun: `<circle cx="32" cy="32" r="11" fill="none" stroke="${S}" stroke-width="2"/>
+          <g stroke="${S}" stroke-width="2" stroke-linecap="round">
+            <line x1="32" y1="8" x2="32" y2="13"/>
+            <line x1="32" y1="51" x2="32" y2="56"/>
+            <line x1="8" y1="32" x2="13" y2="32"/>
+            <line x1="51" y1="32" x2="56" y2="32"/>
+            <line x1="15.5" y1="15.5" x2="19" y2="19"/>
+            <line x1="45" y1="45" x2="48.5" y2="48.5"/>
+            <line x1="15.5" y1="48.5" x2="19" y2="45"/>
+            <line x1="45" y1="19" x2="48.5" y2="15.5"/>
+          </g>`,
+    partlyCloudy: `<circle cx="44" cy="18" r="7" fill="none" stroke="${S}" stroke-width="2"/>
+          <g stroke="${S}" stroke-width="2" stroke-linecap="round">
+            <line x1="44" y1="4" x2="44" y2="7"/>
+            <line x1="58" y1="18" x2="61" y2="18"/>
+            <line x1="34.5" y1="8.5" x2="36.6" y2="10.6"/>
+            <line x1="53.4" y1="27.4" x2="55.5" y2="29.5"/>
+          </g>
+          <path d="M16 46
+                   Q6 46 6 37
+                   Q6 29 14 27
+                   Q16 18 26 18
+                   Q36 18 38 28
+                   Q46 28 46 36
+                   Q46 46 36 46
+                   Z"
+                fill="#14171d" stroke="${S}" stroke-width="2" stroke-linejoin="round"/>`,
+    cloud: `<path d="M15 44h32a11 11 0 0 0 0-22 14.5 14.5 0 0 0-27.6 4.4A11 11 0 0 0 15 44z"
+            fill="none" stroke="${S}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`,
+    rain: `<path d="M13 34h32a10 10 0 0 0 0-20 13.5 13.5 0 0 0-25.8 4A10 10 0 0 0 13 34z"
+           fill="none" stroke="${S}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+           <g stroke="${S}" stroke-width="2" stroke-linecap="round">
+             <line x1="22" y1="41" x2="19" y2="50"/>
+             <line x1="32" y1="41" x2="29" y2="50"/>
+             <line x1="42" y1="41" x2="39" y2="50"/>
+           </g>`,
+    snow: `<path d="M13 32h32a10 10 0 0 0 0-20 13.5 13.5 0 0 0-25.8 4A10 10 0 0 0 13 32z"
+           fill="none" stroke="${S}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+           <g stroke="${S}" stroke-width="2" stroke-linecap="round">
+             <line x1="21" y1="40" x2="21" y2="50"/>
+             <line x1="16.5" y1="42.5" x2="25.5" y2="47.5"/>
+             <line x1="25.5" y1="42.5" x2="16.5" y2="47.5"/>
+             <line x1="43" y1="40" x2="43" y2="50"/>
+             <line x1="38.5" y1="42.5" x2="47.5" y2="47.5"/>
+             <line x1="47.5" y1="42.5" x2="38.5" y2="47.5"/>
+           </g>`,
+    thunder: `<path d="M13 30h32a10 10 0 0 0 0-20 13.5 13.5 0 0 0-25.8 4A10 10 0 0 0 13 30z"
+           fill="none" stroke="${S}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+           <polyline points="35,36 27,48 34,48 29,58" fill="none" stroke="${S}"
+           stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`,
+    fog: `<path d="M15 30h30a9 9 0 0 0 0-18 12 12 0 0 0-22.9 3.6A9 9 0 0 0 15 30z"
+          fill="none" stroke="${S}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+          <g stroke="${S}" stroke-width="2" stroke-linecap="round">
+             <line x1="12" y1="40" x2="52" y2="40"/>
+             <line x1="12" y1="47" x2="52" y2="47"/>
+          </g>`
+  };
+
+  function iconForCode(code) {
+    if (code === 0) return ICONS.sun;
+    if (code === 1 || code === 2) return ICONS.partlyCloudy;
+    if (code === 3) return ICONS.cloud;
+    if ([45, 48].includes(code)) return ICONS.fog;
+    if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) return ICONS.rain;
+    if ([71,73,75,77,85,86].includes(code)) return ICONS.snow;
+    if ([95,96,99].includes(code)) return ICONS.thunder;
+    return ICONS.cloud;
+  }
+
+  async function updateWeather() {
+    const tempEl = document.getElementById('temp');
+    const iconEl = document.getElementById('icon');
+    const updatedEl = document.getElementById('updated');
+
+    try {
+      const res = await fetch(API_URL);
+      if (!res.ok) throw new Error('bad response');
+      const data = await res.json();
+
+      const temp = Math.round(data.current.temperature_2m);
+      const code = data.current.weather_code;
+
+      tempEl.textContent = `${temp}°`;
+      iconEl.innerHTML = iconForCode(code);
+
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      updatedEl.textContent = `${hh}:${mm}`;
+    } catch (err) {
+      tempEl.textContent = '--°';
+      updatedEl.textContent = 'offline';
+      console.error('Weather widget error:', err);
+    }
+  }
+
+  updateWeather();
+  setInterval(updateWeather, REFRESH_MS);
+</script>
+
+</body>
+</html>
